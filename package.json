@@ -1,26 +1,44 @@
 {
-  "name": "socialcast",
+  "name": "all-uploader",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "worker": "tsx --env-file=.env src/worker/index.mts",
+    "worker:dev": "tsx watch --env-file=.env src/worker/index.mts",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "dotenv -e .env -- drizzle-kit push",
+    "db:studio": "dotenv -e .env -- drizzle-kit studio",
+    "setup": "tsx --env-file=.env scripts/setup.mts",
+    "dev:all": "concurrently -n web,worker -c cyan,magenta \"npm:dev\" \"npm:worker\""
   },
   "dependencies": {
+    "@atproto/api": "^0.20.40",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
     "next": "16.3.1",
+    "postgres": "^3.4.9",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "sharp": "^0.35.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^20.19.43",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.4",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5"
   }
 }
