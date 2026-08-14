@@ -24,27 +24,39 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          # Not deployed yet is a normal state, not a failure. Failing here
+          # would mail a red run every five minutes forever until setup.
           if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "APP_URL and CRON_SECRET repository secrets are not set."
-            echo "Settings -> Secrets and variables -> Actions."
-            exit 1
+            echo "::notice::Skipped - APP_URL and CRON_SECRET are not set yet."
+            echo "Set them under Settings -> Secrets and variables -> Actions once the app is deployed."
+            echo "Until then there is nothing to publish to." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           code=$(curl -sS -o response.json -w '%{http_code}' \
             --max-time 120 \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/drain")
+            "$APP_URL/api/cron/drain" || echo 000)
 
           echo "HTTP $code"
-          cat response.json
+          cat response.json 2>/dev/null || true
           echo
 
-          if [ "$code" != "200" ]; then
-            echo "::error::Drain failed with HTTP $code"
-            exit 1
-          fi
+          case "$code" in
+            200) ;;
+            401) echo "::error::CRON_SECRET here does not match the one set on the host."; exit 1 ;;
+            503) echo "::error::CRON_SECRET is not set on the host, so the endpoint refuses to run."; exit 1 ;;
+            000) echo "::error::Could not reach $APP_URL - check the deployment is live."; exit 1 ;;
+            *)   echo "::error::Drain failed with HTTP $code"; exit 1 ;;
+          esac
 
           # Surface publish failures in the run summary rather than burying them.
+          summary=$(node -e "
+            const r = require('./response.json');
+            process.stdout.write(\`claimed \${r.claimed} / published \${r.done} / failed \${r.failed}\`);
+          ")
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+
           failed=$(node -e "process.stdout.write(String(require('./response.json').failed ?? 0))")
           if [ "$failed" != "0" ]; then
             echo "::warning::$failed job(s) failed this run - check the Posts page"
