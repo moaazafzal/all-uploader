@@ -4,7 +4,7 @@ import { mediaAssets, postMedia, postTargets, posts, socialAccounts } from '@/db
 import { getAdapter, validateForAdapter, PublishError } from '@/platforms'
 import type { Issue, ResolvedMedia } from '@/platforms/types'
 import { getUsableAccount, markNeedsReauth } from './accounts'
-import { pathFor, publicUrlFor } from './storage'
+import { localCopy, publicUrlFor } from './storage'
 import { enqueue } from './queue'
 
 /** Load a post's media in composer order, shaped for the adapters. */
@@ -16,18 +16,22 @@ export async function resolveMedia(postId: string): Promise<ResolvedMedia[]> {
     .where(eq(postMedia.postId, postId))
     .orderBy(asc(postMedia.position))
 
-  return rows.map(({ media }) => ({
-    id: media.id,
-    kind: media.kind,
-    filename: media.filename,
-    mimeType: media.mimeType,
-    bytes: media.bytes,
-    width: media.width,
-    height: media.height,
-    durationMs: media.durationMs,
-    path: pathFor(media.storageKey),
-    publicUrl: publicUrlFor(media.id),
-  }))
+  // localCopy pulls the object down when storage is S3-backed, so adapters can
+  // keep dealing in plain file paths.
+  return Promise.all(
+    rows.map(async ({ media }) => ({
+      id: media.id,
+      kind: media.kind,
+      filename: media.filename,
+      mimeType: media.mimeType,
+      bytes: media.bytes,
+      width: media.width,
+      height: media.height,
+      durationMs: media.durationMs,
+      path: await localCopy(media.storageKey),
+      publicUrl: publicUrlFor(media.id, media.storageKey),
+    })),
+  )
 }
 
 export interface TargetPreflight {

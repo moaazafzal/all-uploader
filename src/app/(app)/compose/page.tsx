@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWorkspace } from '@/components/workspace-context'
 import { apiFetch, fmtBytes } from '@/lib/client'
@@ -11,7 +11,7 @@ import { checkCapabilities } from '@/platforms/validate'
 import type { Capabilities, Issue } from '@/platforms/types'
 
 interface PlatformInfo { id: string; label: string; color: string; capabilities: Capabilities }
-interface Account { id: string; platform: string; handle: string | null; displayName: string | null; avatarUrl: string | null; status: string; meta: Record<string, any> }
+interface Account { id: string; platform: string; handle: string | null; displayName: string | null; avatarUrl: string | null; status: string; meta: Record<string, unknown> }
 
 export default function ComposePage() {
   const { active } = useWorkspace()
@@ -37,7 +37,7 @@ export default function ComposePage() {
       .catch((e) => setError(e.message))
   }, [active.id])
 
-  const platformOf = (id: string) => platforms.find((p) => p.id === id)
+  const platformOf = useCallback((id: string) => platforms.find((p) => p.id === id), [platforms])
 
   /**
    * Validation runs in the browser against the same capability rules the server
@@ -61,7 +61,7 @@ export default function ComposePage() {
       }
       return { accountId, account, issues }
     })
-  }, [selected, accounts, platforms, text, overrides, media, options])
+  }, [selected, accounts, platformOf, text, overrides, media, options])
 
   const blocking = checks.filter((c) => c.issues.some((i) => i.level === 'error'))
   const canPublish = selected.length > 0 && blocking.length === 0 && !busy
@@ -92,6 +92,10 @@ export default function ComposePage() {
         method: 'POST',
         body: JSON.stringify({ scheduledAt: publishNow ? null : scheduledAt || null }),
       })
+      // Deployments without a long-running worker rely on this to publish
+      // immediately rather than waiting for the next cron tick. Deliberately
+      // not awaited -- the posts page polls, and cron is the safety net.
+      if (publishNow) void fetch(`/api/posts/${post.id}/kick`, { method: 'POST' }).catch(() => {})
       router.push('/posts')
     } catch (err) {
       setError((err as Error).message)

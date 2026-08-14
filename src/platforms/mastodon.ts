@@ -70,7 +70,7 @@ export const mastodon: PlatformAdapter = {
       // 206s until the asset is ready to attach.
       if (!up.url) {
         await poll(
-          () => api<any>(`${host}/api/v1/media/${up.id}`, { label: 'Mastodon media status', headers: bearer(token) }),
+          () => api<{ url: string | null }>(`${host}/api/v1/media/${up.id}`, { label: 'Mastodon media status', headers: bearer(token) }),
           (v) => (v?.url ? 'done' : 'wait'),
           { label: 'Mastodon media processing', attempts: 20, intervalMs: 3000 },
         )

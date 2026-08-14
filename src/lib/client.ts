@@ -1,7 +1,7 @@
 'use client'
 
 /** Thin fetch wrapper -- every API route answers { error } on failure. */
-export async function apiFetch<T = any>(url: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers },

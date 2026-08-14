@@ -133,6 +133,6 @@ export function publicAccount(row: SocialAccount) {
 
 /** meta holds a Meta user token for page re-derivation; that must not ship to the client. */
 function scrubMeta(meta: Record<string, unknown>) {
-  const { userToken, botToken, webhookUrl, ...safe } = meta as Record<string, unknown>
-  return safe
+  const SECRET_KEYS = ['userToken', 'botToken', 'webhookUrl', 'appPassword']
+  return Object.fromEntries(Object.entries(meta).filter(([k]) => !SECRET_KEYS.includes(k)))
 }

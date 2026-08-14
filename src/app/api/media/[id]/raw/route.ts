@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { mediaAssets } from '@/db/schema'
-import { pathFor } from '@/lib/storage'
+import { localCopy } from '@/lib/storage'
 
 /**
  * Deliberately unauthenticated: Instagram, Threads, TikTok and Pinterest fetch
@@ -15,7 +15,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const [row] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, id)).limit(1)
   if (!row) return new Response('Not found', { status: 404 })
 
-  const file = pathFor(row.storageKey)
+  // With a public S3 base URL the platforms fetch from the bucket directly and
+  // never reach this route; it stays as the fallback for local storage.
+  const file = await localCopy(row.storageKey)
   if (!fs.existsSync(file)) return new Response('Not found', { status: 404 })
 
   const total = row.bytes

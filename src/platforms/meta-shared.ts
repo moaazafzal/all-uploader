@@ -47,8 +47,12 @@ export async function exchangeForLongLived(shortToken: string): Promise<TokenSet
 }
 
 /** Meta returns a nested error object; surface the human-readable part. */
+interface MetaErrorBody {
+  error?: { message?: string; code?: number; is_transient?: boolean }
+}
+
 export function metaError(label: string, body: unknown): never {
-  const e = (body as any)?.error
+  const e = (body as MetaErrorBody)?.error
   throw new PublishError(`${label}: ${e?.message ?? JSON.stringify(body)}`, {
     reauth: e?.code === 190,
     retryable: e?.is_transient === true,

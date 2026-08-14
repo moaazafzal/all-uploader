@@ -40,8 +40,9 @@ async function uploadMedia(token: string, m: ResolvedMedia, log: (s: string) => 
   })
 
   if (fin.data.processing_info) {
+    type Status = { data?: { processing_info?: { state: string; error?: { message?: string } } } }
     await poll(
-      () => api<any>(`${UPLOAD}?command=STATUS&media_id=${mediaId}`, { label: 'X media STATUS', headers: bearer(token) }),
+      () => api<Status>(`${UPLOAD}?command=STATUS&media_id=${mediaId}`, { label: 'X media STATUS', headers: bearer(token) }),
       (v) => {
         const info = v?.data?.processing_info
         if (!info || info.state === 'succeeded') return 'done'

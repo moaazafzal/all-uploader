@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "src/app/api/cron/drain/route.ts": { "maxDuration": 60 },
+    "src/app/api/posts/[id]/kick/route.ts": { "maxDuration": 60 },
+    "src/app/api/media/[id]/raw/route.ts": { "maxDuration": 60 }
+  }
+}

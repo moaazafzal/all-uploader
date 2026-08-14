@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiFetch, fmtBytes } from '@/lib/client'
+import { probe, putWithProgress } from '@/lib/probe-client'
 
 export interface Media {
   id: string
@@ -25,23 +26,63 @@ export default function MediaPicker({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [progress, setProgress] = useState<{ name: string; pct: number } | null>(null)
+  const [directUpload, setDirectUpload] = useState(false)
+
+  useEffect(() => {
+    apiFetch<{ directUpload: boolean }>('/api/config')
+      .then((c) => setDirectUpload(c.directUpload))
+      .catch(() => setDirectUpload(false))
+  }, [])
 
   async function upload(files: FileList | File[]) {
     if (!files.length) return
     setBusy(true)
     setError('')
     try {
-      const fd = new FormData()
-      fd.set('workspaceId', workspaceId)
-      for (const f of Array.from(files)) fd.append('files', f)
-      const saved = await apiFetch<Media[]>('/api/media', { method: 'POST', body: fd })
+      const saved: Media[] = []
+      for (const f of Array.from(files)) {
+        saved.push(directUpload ? await uploadDirect(f) : await uploadViaApi(f))
+      }
       onChange([...media, ...saved])
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setBusy(false)
+      setProgress(null)
       if (input.current) input.current.value = ''
     }
+  }
+
+  /**
+   * Straight to the bucket. Serverless hosts cap request bodies far below video
+   * size, so anything large has to skip the API entirely.
+   */
+  async function uploadDirect(file: File): Promise<Media> {
+    setProgress({ name: file.name, pct: 0 })
+    const { uploadUrl, storageKey } = await apiFetch<{ uploadUrl: string; storageKey: string }>(
+      '/api/media/presign',
+      {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId, filename: file.name, mimeType: file.type, bytes: file.size }),
+      },
+    )
+    await putWithProgress(uploadUrl, file, (pct) => setProgress({ name: file.name, pct }))
+    // The server never sees the bytes, so measure here.
+    const meta = await probe(file)
+    return apiFetch<Media>('/api/media/complete', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, storageKey, filename: file.name, mimeType: file.type, ...meta }),
+    })
+  }
+
+  async function uploadViaApi(file: File): Promise<Media> {
+    setProgress({ name: file.name, pct: 0 })
+    const fd = new FormData()
+    fd.set('workspaceId', workspaceId)
+    fd.append('files', file)
+    const [row] = await apiFetch<Media[]>('/api/media', { method: 'POST', body: fd })
+    return row
   }
 
   const move = (from: number, to: number) => {
@@ -68,8 +109,13 @@ export default function MediaPicker({
           dragging ? 'border-accent bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]' : 'border-line hover:border-muted'
         }`}
       >
-        <p className="text-sm">{busy ? 'Uploading...' : 'Drop images or video here, or click to browse'}</p>
-        <p className="text-xs text-muted mt-1">Uploaded once, reused for every destination.</p>
+        <p className="text-sm">
+          {progress ? `Uploading ${progress.name} - ${progress.pct}%` : busy ? 'Uploading...' : 'Drop images or video here, or click to browse'}
+        </p>
+        <p className="text-xs text-muted mt-1">
+          Uploaded once, reused for every destination.
+          {directUpload && ' Large files go straight to storage.'}
+        </p>
         <input
           ref={input}
           type="file"

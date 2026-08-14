@@ -39,7 +39,13 @@ publish time.
 
 ---
 
-## Setup
+## Live deployment
+
+See **[DEPLOY.md](DEPLOY.md)** for a free stack: Vercel + Neon + Cloudflare R2,
+with GitHub Actions standing in for the worker. Note the 60-second serverless
+function limit documented there.
+
+## Local setup
 
 Requires Node 20+ and Postgres 14+.
 
@@ -129,8 +135,14 @@ roll-up all pick it up with no further changes.
 
 ## Operating notes
 
-- `npm run worker` runs the publisher. **Nothing publishes without it.**
+- `npm run worker` runs the publisher. **Nothing publishes without it** — unless
+  you deploy the serverless way, where `/api/cron/drain` does the same work on a
+  schedule and the app kicks its own queue on publish. See [DEPLOY.md](DEPLOY.md).
 - Scheduled posts fire from the same worker — there is no separate cron.
+- Media goes to local disk by default. Set `S3_BUCKET` to use S3/R2 instead,
+  which is required whenever the web app and the queue do not share a
+  filesystem. With `S3_PUBLIC_URL` set, the platforms that fetch media read
+  straight from the bucket.
 - Media at `/api/media/:id/raw` is intentionally unauthenticated, because the
   four pull-based platforms fetch it with no credentials of ours. IDs are random
   UUIDs, but treat anything attached to those platforms as public.

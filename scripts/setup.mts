@@ -54,6 +54,26 @@ async function main() {
     ok(appUrl)
   }
 
+  console.log('\nStorage')
+  if (process.env.S3_BUCKET) {
+    ok(`S3 bucket ${process.env.S3_BUCKET} via ${process.env.S3_ENDPOINT ?? 'AWS'}`)
+    if (!process.env.S3_ACCESS_KEY_ID || !process.env.S3_SECRET_ACCESS_KEY) {
+      bad('S3_BUCKET is set but the access keys are missing')
+      failures++
+    }
+    if (process.env.S3_PUBLIC_URL) ok(`public base ${process.env.S3_PUBLIC_URL}`)
+    else warn('S3_PUBLIC_URL is unset -- media is proxied through this app instead of served from the bucket')
+  } else {
+    warn('local disk storage -- only works when the web app and worker share a filesystem')
+  }
+
+  console.log('\nQueue')
+  if (process.env.CRON_SECRET) {
+    ok('CRON_SECRET set -- /api/cron/drain is available for scheduled draining')
+  } else {
+    warn('CRON_SECRET unset -- /api/cron/drain refuses to run. Fine if you run "npm run worker".')
+  }
+
   console.log('\nMedia probing')
   if (await hasFfprobe()) ok('ffprobe found -- video duration and dimensions will be validated')
   else warn('ffprobe not found -- video duration checks are skipped (brew install ffmpeg)')

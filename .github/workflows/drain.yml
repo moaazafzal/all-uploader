@@ -1,0 +1,51 @@
+name: Publish queue
+
+# This workflow IS the worker for deployments with no long-running process.
+# It pokes the drain endpoint, which claims due jobs and publishes them.
+#
+# GitHub's scheduler is best-effort and can run late under load, so treat five
+# minutes as a floor, not a guarantee. "Publish now" does not depend on this --
+# the app kicks the queue itself; this covers scheduled posts and retries.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-queue
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drain the publish queue
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL and CRON_SECRET repository secrets are not set."
+            echo "Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          code=$(curl -sS -o response.json -w '%{http_code}' \
+            --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/drain")
+
+          echo "HTTP $code"
+          cat response.json
+          echo
+
+          if [ "$code" != "200" ]; then
+            echo "::error::Drain failed with HTTP $code"
+            exit 1
+          fi
+
+          # Surface publish failures in the run summary rather than burying them.
+          failed=$(node -e "process.stdout.write(String(require('./response.json').failed ?? 0))")
+          if [ "$failed" != "0" ]; then
+            echo "::warning::$failed job(s) failed this run - check the Posts page"
+          fi

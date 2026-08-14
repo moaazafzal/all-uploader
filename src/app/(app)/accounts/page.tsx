@@ -1,17 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useWorkspace } from '@/components/workspace-context'
 import { apiFetch } from '@/lib/client'
 import PlatformIcon from '@/components/platform-icon'
 import CredentialsDialog from '@/components/credentials-dialog'
 
+interface ConnectField {
+  key: string
+  label: string
+  type: string
+  required: boolean
+  help?: string
+  default?: string | boolean
+}
+
 interface PlatformInfo {
   id: string
   label: string
   color: string
-  connect: { kind: string; docsUrl: string; fields: any[] }
+  connect: { kind: string; docsUrl: string; fields: ConnectField[] }
   caveats: string[]
   setup: { tier: 'instant' | 'app' | 'review'; note: string }
   configured: boolean
@@ -39,31 +48,55 @@ export default function AccountsPage() {
   const [platforms, setPlatforms] = useState<PlatformInfo[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [dialog, setDialog] = useState<PlatformInfo | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [loadError, setLoadError] = useState('')
+  const [dismissed, setDismissed] = useState(false)
 
-  async function reload() {
-    const [p, a] = await Promise.all([
-      apiFetch<PlatformInfo[]>('/api/platforms'),
-      apiFetch<Account[]>(`/api/accounts?workspace=${active.id}`),
-    ])
-    setPlatforms(p)
-    setAccounts(a)
-  }
+  const reload = useCallback(
+    async (alive: () => boolean = () => true) => {
+      try {
+        const [p, a] = await Promise.all([
+          apiFetch<PlatformInfo[]>('/api/platforms'),
+          apiFetch<Account[]>(`/api/accounts?workspace=${active.id}`),
+        ])
+        if (!alive()) return
+        setPlatforms(p)
+        setAccounts(a)
+        setLoadError('')
+      } catch (e) {
+        if (alive()) setLoadError((e as Error).message)
+      }
+    },
+    [active.id],
+  )
 
   useEffect(() => {
-    reload().catch((e) => setNotice({ kind: 'err', text: e.message }))
-  }, [active.id])
+    // Switching workspace mid-request must not let the stale response land.
+    let cancelled = false
+    const run = () => reload(() => !cancelled)
+    run()
+    return () => { cancelled = true }
+  }, [reload])
 
-  useEffect(() => {
-    const err = params.get('error')
-    const connected = params.get('connected')
-    if (err) setNotice({ kind: 'err', text: err })
-    else if (connected) setNotice({ kind: 'ok', text: `Connected ${params.get('count') ?? 1} ${connected} destination(s).` })
-  }, [params])
+  // Derived from the URL during render -- the OAuth callback redirects back
+  // here with the outcome, and storing that in state would just mirror it.
+  const callbackError = params.get('error')
+  const connectedPlatform = params.get('connected')
+  const notice = dismissed
+    ? null
+    : loadError
+      ? { kind: 'err' as const, text: loadError }
+      : callbackError
+        ? { kind: 'err' as const, text: callbackError }
+        : connectedPlatform
+          ? { kind: 'ok' as const, text: `Connected ${params.get('count') ?? 1} ${connectedPlatform} destination(s).` }
+          : null
 
   function connect(p: PlatformInfo) {
     if (p.connect.kind === 'oauth2') {
-      window.location.href = `/api/oauth/${p.id}/start?workspace=${active.id}&redirectTo=/accounts`
+      // Deliberately a full navigation, not router.push: this route 302s out to
+      // the provider's consent screen, which the client router cannot follow.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/api/oauth/${p.id}/start?workspace=${active.id}&redirectTo=/accounts`)
     } else {
       setDialog(p)
     }
@@ -89,7 +122,7 @@ export default function AccountsPage() {
       {notice && (
         <div className={`card p-3 text-sm ${notice.kind === 'err' ? 'text-danger' : 'text-accent'}`}>
           {notice.text}
-          <button className="float-right text-muted hover:text-ink" onClick={() => setNotice(null)}>x</button>
+          <button className="float-right text-muted hover:text-ink" onClick={() => setDismissed(true)}>x</button>
         </div>
       )}
 

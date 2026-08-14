@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      # The build only needs these to exist, not to be real -- no network calls
+      # happen at build time.
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: postgres://build:build@localhost:5432/build
+          ENCRYPTION_KEY: TFhCbDN2Y0FhWmpLcVJ0WHc5c1BuMmVEZ0Y0aE02eTA=
+          APP_URL: http://localhost:3000
+
+  # Guards the schema: catches a schema.ts edit that was never pushed to a real
+  # database, which typecheck cannot see.
+  migrate-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Push schema to a throwaway database
+        run: npx drizzle-kit push --force
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ci

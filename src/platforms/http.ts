@@ -12,7 +12,7 @@ export interface ApiOptions extends RequestInit {
   timeoutMs?: number
 }
 
-export async function api<T = any>(url: string, opts: ApiOptions): Promise<T> {
+export async function api<T = unknown>(url: string, opts: ApiOptions): Promise<T> {
   const { label, parse = 'json', timeoutMs = 120_000, ...init } = opts
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)

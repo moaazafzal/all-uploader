@@ -53,15 +53,18 @@ export default function PostsPage() {
   }, [active.id])
 
   useEffect(() => {
-    load()
-    // While anything is mid-flight the worker is changing rows underneath us.
-    const t = setInterval(load, 5000)
-    return () => clearInterval(t)
+    // While anything is mid-flight the queue is changing rows underneath us.
+    let cancelled = false
+    const tick = () => { if (!cancelled) load() }
+    tick()
+    const t = setInterval(tick, 5000)
+    return () => { cancelled = true; clearInterval(t) }
   }, [load])
 
   async function retry(id: string) {
     try {
       await apiFetch(`/api/posts/${id}/retry`, { method: 'POST' })
+      void fetch(`/api/posts/${id}/kick`, { method: 'POST' }).catch(() => {})
       load()
     } catch (e) {
       setError((e as Error).message)

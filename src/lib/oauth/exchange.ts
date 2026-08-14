@@ -11,6 +11,17 @@ export interface RawTokens {
   extra?: Record<string, unknown>
 }
 
+/** Shape shared by every provider's token endpoint, plus TikTok's `data` nesting. */
+interface TokenResponse {
+  access_token?: string
+  refresh_token?: string
+  expires_in?: number | string
+  scope?: string
+  open_id?: string
+  id_token?: string
+  data?: TokenResponse
+}
+
 /** Authorization-code exchange, normalised across providers. */
 export async function exchangeCode(
   platform: PlatformId,
@@ -42,7 +53,7 @@ export async function exchangeCode(
   }
   if (platform === 'reddit') headers['User-Agent'] = process.env.REDDIT_USER_AGENT ?? 'all-uploader/1.0'
 
-  const res = await api<any>(p.tokenUrl, {
+  const res = await api<TokenResponse>(p.tokenUrl, {
     label: `${platform} token exchange`,
     method: 'POST',
     headers,
@@ -50,11 +61,11 @@ export async function exchangeCode(
   })
 
   // TikTok nests some responses under data, others at the root.
-  const body = res.data?.access_token ? res.data : res
+  const body: TokenResponse = res.data?.access_token ? res.data : res
   const expiresIn = Number(body.expires_in ?? 0)
 
   return {
-    accessToken: body.access_token,
+    accessToken: body.access_token!,
     refreshToken: body.refresh_token ?? null,
     expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : null,
     scopes: typeof body.scope === 'string' ? body.scope.split(/[ ,]/).filter(Boolean) : undefined,

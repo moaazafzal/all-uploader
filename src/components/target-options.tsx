@@ -13,7 +13,7 @@ export default function TargetOptions({
   account, platform, overrideText, baseText, options, issues,
   onOverrideText, onClearOverride, onOptions,
 }: {
-  account: { id: string; platform: string; handle: string | null; displayName: string | null; meta: Record<string, any> }
+  account: { id: string; platform: string; handle: string | null; displayName: string | null; meta: Record<string, unknown> }
   platform: { id: string; label: string; color: string; capabilities: Capabilities }
   overrideText: string | undefined
   baseText: string
